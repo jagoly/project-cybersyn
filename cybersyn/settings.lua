@@ -57,9 +57,9 @@ data:extend({
 		name = "cybersyn-network-flag",
 		order = "bd",
 		setting_type = "runtime-global",
-		default_value = -1,
-		minimum_value = -2147483648,
-		maximum_value = 2147483647,
+		default_value = 65535,
+		minimum_value = 0,
+		maximum_value = 65535,
 	},
 	{
 		type = "double-setting",

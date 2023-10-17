@@ -32,3 +32,12 @@ priority_signal = {
 	subgroup = "cybersyn-signal",
 	order = "c"
 }
+channels_signal = {
+	type = "virtual-signal",
+	name = SIGNAL_CHANNELS,
+	icon = "__cybersyn__/graphics/icons/channels.png",
+	icon_size = 64,
+	icon_mipmaps = 4,
+	subgroup = "cybersyn-signal",
+	order = "d"
+}

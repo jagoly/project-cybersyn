@@ -20,6 +20,7 @@ data:extend({
 	priority_signal,
 	r_threshold_signal,
 	locked_slots_signal,
+	channels_signal,
 	missing_train_icon,
 	lost_train_icon,
 	nonempty_train_icon,

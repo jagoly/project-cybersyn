@@ -7,7 +7,6 @@ local string_sub = string.sub
 local string_len = string.len
 
 local DEFINES_WORKING = defines.entity_status.working
-local DEFINES_LOW_POWER = defines.entity_status.low_power
 local DEFINES_COMBINATOR_INPUT = defines.circuit_connector_id.combinator_input
 
 
@@ -101,14 +100,6 @@ end
 ---@return LuaEntity?
 function get_any_train_entity(train)
 	return train.valid and (train.front_stock or train.back_stock or train.carriages[1]) or nil
-end
-
-
----@param e Station|Refueler|Train
----@param network_name string
----@return int
-function get_network_mask(e, network_name)
-	return e.network_name == NETWORK_EACH and (e.network_mask[network_name] or 0) or e.network_mask--[[@as int]]
 end
 
 
@@ -431,35 +422,34 @@ function get_comb_params(comb)
 	return comb.get_or_create_control_behavior().parameters--[[@as ArithmeticCombinatorParameters]]
 end
 
+---@param station Station
+function check_station_combs_valid(station)
+	--TODO: probably don't need all of these, but this is a drop-in replacement for validating comb1+comb2
+	return station.entity_comb_station.valid
+		and (not station.entity_comb_threshold or station.entity_comb_threshold.valid)
+		and (not station.entity_comb_priority or station.entity_comb_priority.valid)
+		and (not station.entity_comb_channels or station.entity_comb_channels.valid)
+		and (not station.entity_comb_load or station.entity_comb_load.valid)
+		and (not station.entity_comb_orders or station.entity_comb_orders.valid)
+end
+
 ---NOTE: does not check .valid
 ---@param station Station
 function set_station_from_comb(station)
 	--NOTE: this does nothing to update currently active deliveries
 	--NOTE: this can only be called at the tick init boundary
-	local params = get_comb_params(station.entity_comb1)
+	local params = get_comb_params(station.entity_comb_station)
 	local signal = params.first_signal
-
 	local bits = params.second_constant or 0
 	local is_pr_state = bit_extract(bits, 0, 2)
-	local allows_all_trains = bit_extract(bits, SETTING_DISABLE_ALLOW_LIST) > 0
-	local is_stack = bit_extract(bits, SETTING_IS_STACK) > 0
-	local enable_inactive = bit_extract(bits, SETTING_ENABLE_INACTIVE) > 0
 
-	station.allows_all_trains = allows_all_trains
-	station.is_stack = is_stack
-	station.enable_inactive = enable_inactive
+	station.allows_all_trains = bit_extract(bits, SETTING_DISABLE_ALLOW_LIST) > 0
+	station.is_stack = bit_extract(bits, SETTING_IS_STACK) > 0
+	station.enable_inactive = bit_extract(bits, SETTING_ENABLE_INACTIVE) > 0
 	station.is_p = (is_pr_state == 0 or is_pr_state == 1) or nil
 	station.is_r = (is_pr_state == 0 or is_pr_state == 2) or nil
-
-	local new_name = signal and signal.name or nil
-	if station.network_name ~= new_name then
-		station.network_name = new_name
-		if station.network_name == NETWORK_EACH then
-			station.network_mask = {}
-		else
-			station.network_mask = 0
-		end
-	end
+	station.network_name = signal and signal.name or nil
+	station.network_mask = bit_extract(bits, 15, 16)
 end
 ---NOTE: does not check .valid
 ---@param mod_settings CybersynModSettings
@@ -469,42 +459,19 @@ function set_train_from_comb(mod_settings, train, comb)
 	--NOTE: this does nothing to update currently active deliveries
 	local params = get_comb_params(comb)
 	local signal = params.first_signal
-	local network_name = signal and signal.name or nil
-
 	local bits = params.second_constant or 0
-	local disable_bypass = bit_extract(bits, SETTING_DISABLE_DEPOT_BYPASS) > 0
-	local use_any_depot = bit_extract(bits, SETTING_USE_ANY_DEPOT) > 0
 
-	train.network_name = network_name
-	train.disable_bypass = disable_bypass
-	train.use_any_depot = use_any_depot
-
-	local is_each = train.network_name == NETWORK_EACH
-	if is_each then
-		train.network_mask = {}
-	else
-		train.network_mask = mod_settings.network_mask
-	end
+	train.disable_bypass = bit_extract(bits, SETTING_DISABLE_DEPOT_BYPASS) > 0
+	train.use_any_depot = bit_extract(bits, SETTING_USE_ANY_DEPOT) > 0
+	train.network_name = signal and signal.name or nil
+	train.network_mask = bit_extract(bits, 15, 16)
 	train.priority = mod_settings.priority
+
 	local signals = comb.get_merged_signals(defines.circuit_connector_id.combinator_input)
 	if signals then
 		for k, v in pairs(signals) do
-			local item_name = v.signal.name
-			local item_type = v.signal.type
-			local item_count = v.count
-			if item_name then
-				if item_type == "virtual" then
-					if item_name == SIGNAL_PRIORITY then
-						train.priority = item_count
-					elseif is_each then
-						if item_name ~= REQUEST_THRESHOLD and item_name ~= LOCKED_SLOTS then
-							train.network_mask[item_name] = item_count
-						end
-					end
-				end
-				if item_name == network_name then
-					train.network_mask = item_count
-				end
+			if v.signal.name == SIGNAL_PRIORITY then
+				train.priority = v.count
 			end
 		end
 	end
@@ -518,75 +485,35 @@ function set_refueler_from_comb(map_data, mod_settings, id, refueler)
 	local params = get_comb_params(refueler.entity_comb)
 	local bits = params.second_constant or 0
 	local signal = params.first_signal
-	local old_network = refueler.network_name
-	local old_network_mask = refueler.network_mask
+	local old_network_name = refueler.network_name
 
-	refueler.network_name = signal and signal.name or nil
 	refueler.allows_all_trains = bit_extract(bits, SETTING_DISABLE_ALLOW_LIST) > 0
+	refueler.network_name = signal and signal.name or nil
+	refueler.network_mask = bit_extract(bits, 15, 16)
 	refueler.priority = mod_settings.priority
-
-	local is_each = refueler.network_name == NETWORK_EACH
-	if is_each then
-		map_data.each_refuelers[id] = true
-		refueler.network_mask = {}
-	else
-		map_data.each_refuelers[id] = nil
-		refueler.network_mask = mod_settings.network_mask
-	end
 
 	local signals = refueler.entity_comb.get_merged_signals(DEFINES_COMBINATOR_INPUT)
 	if signals then
 		for k, v in pairs(signals) do
-			local item_name = v.signal.name
-			local item_type = v.signal.type
-			local item_count = v.count
-			if item_name then
-				if item_type == "virtual" then
-					if item_name == SIGNAL_PRIORITY then
-						refueler.priority = item_count
-					elseif is_each then
-						if item_name ~= REQUEST_THRESHOLD and item_name ~= LOCKED_SLOTS then
-							refueler.network_mask[item_name] = item_count
-						end
-					end
-				end
-				if item_name == refueler.network_name then
-					refueler.network_mask = item_count
-				end
+			if v.signal.name == SIGNAL_PRIORITY then
+				refueler.priority = v.count
 			end
 		end
 	end
 
-	local f, a
-	if old_network == NETWORK_EACH then
-		f, a = pairs(old_network_mask--[[@as {[string]: int}]])
-	elseif old_network ~= refueler.network_name then
-		f, a = once, old_network
-	else
-		f, a = once, nil
-	end
-	for network_name, _ in f, a do
-		local network = map_data.to_refuelers[network_name]
-		if network then
-			network[id] = nil
-			if next(network) == nil then
-				map_data.to_refuelers[network_name] = nil
-			end
+	if old_network_name then
+		local network = map_data.to_refuelers[old_network_name]
+		network[id] = nil
+		if next(network) == nil then
+			map_data.to_refuelers[old_network_name] = nil
 		end
 	end
 
-	if refueler.network_name == NETWORK_EACH then
-		f, a = pairs(refueler.network_mask--[[@as {[string]: int}]])
-	elseif old_network ~= refueler.network_name then
-		f, a = once, refueler.network_name
-	else
-		f, a = once, nil
-	end
-	for network_name, _ in f, a do
-		local network = map_data.to_refuelers[network_name]
+	if refueler.network_name then
+		local network = map_data.to_refuelers[refueler.network_name]
 		if not network then
 			network = {}
-			map_data.to_refuelers[network_name] = network
+			map_data.to_refuelers[refueler.network_name] = network
 		end
 		network[id] = true
 	end
@@ -595,24 +522,23 @@ end
 ---@param map_data MapData
 ---@param station Station
 function update_display(map_data, station)
-	local comb = station.entity_comb1
+	local comb = station.entity_comb_station
 	if comb.valid then
 		local control = get_comb_control(comb)
 		local params = control.parameters
 		--NOTE: the following check can cause a bug where the display desyncs if the player changes the operation of the combinator and then changes it back before the mod can notice, however removing it causes a bug where the user's change is overwritten and ignored. Everything's bad we need an event to catch copy-paste by blueprint.
-		if params.operation == MODE_PRIMARY_IO or params.operation == MODE_PRIMARY_IO_ACTIVE or params.operation == MODE_PRIMARY_IO_FAILED_REQUEST then
+		if params.operation == CSU_MODE_STATION or params.operation == CSU_MODE_STATION_ACTIVE or params.operation == CSU_MODE_STATION_FAILED then
 			if station.display_state == 0 then
-				params.operation = MODE_PRIMARY_IO
+				params.operation = CSU_MODE_STATION
 			elseif station.display_state%2 == 1 then
-				params.operation = MODE_PRIMARY_IO_ACTIVE
+				params.operation = CSU_MODE_STATION_ACTIVE
 			else
-				params.operation = MODE_PRIMARY_IO_FAILED_REQUEST
+				params.operation = CSU_MODE_STATION_FAILED
 			end
 			control.parameters = params
 		end
 	end
 end
-
 ---@param comb LuaEntity
 function get_comb_gui_settings(comb)
 	local params = get_comb_params(comb)
@@ -630,16 +556,24 @@ function get_comb_gui_settings(comb)
 		switch_state = "right"
 	end
 
-	if op == MODE_PRIMARY_IO or op == MODE_PRIMARY_IO_ACTIVE or op == MODE_PRIMARY_IO_FAILED_REQUEST then
+	if op == CSU_MODE_STATION or op == CSU_MODE_STATION_FAILED or op == CSU_MODE_STATION_ACTIVE then
 		selected_index = 1
-	elseif op == MODE_DEPOT then
+	elseif op == CSU_MODE_THRESHOLD then
 		selected_index = 2
-	elseif op == MODE_REFUELER then
+	elseif op == CSU_MODE_PRIORITY then
 		selected_index = 3
-	elseif op == MODE_SECONDARY_IO then
+	elseif op == CSU_MODE_CHANNELS then
 		selected_index = 4
-	elseif op == MODE_WAGON then
+	elseif op == CSU_MODE_LOAD then
 		selected_index = 5
+	elseif op == CSU_MODE_ORDERS then
+		selected_index = 6
+	elseif op == CSU_MODE_DEPOT then
+		selected_index = 7
+	elseif op == CSU_MODE_REFUELER then
+		selected_index = 8
+	elseif op == CSU_MODE_WAGON then
+		selected_index = 9
 	end
 	return selected_index--[[@as uint]], params.first_signal, switch_state, bits
 end
@@ -674,6 +608,16 @@ function set_comb_network_name(comb, signal)
 	control.parameters = param
 end
 ---@param comb LuaEntity
+---@param mask int
+function set_comb_network_mask(comb, mask)
+	local control = get_comb_control(comb)
+	local param = control.parameters
+	local bits = param.second_constant or 0
+
+	param.second_constant = bit_replace(bits, mask, 15, 16)
+	control.parameters = param
+end
+---@param comb LuaEntity
 ---@param op string
 function set_comb_operation(comb, op)
 	local control = get_comb_control(comb)
@@ -694,31 +638,43 @@ function set_combinator_output(map_data, comb, signals)
 end
 
 ---@param station Station
-function get_signals(station)
-	local comb1 = station.entity_comb1
-	local status1 = comb1.status
-	---@type Signal[]?
-	local comb1_signals = nil
-	---@type Signal[]?
-	local comb2_signals = nil
-	if status1 == DEFINES_WORKING or status1 == DEFINES_LOW_POWER then
-		comb1_signals = comb1.get_merged_signals(DEFINES_COMBINATOR_INPUT)
+function get_station_signals(station)
+	local comb = station.entity_comb_station
+	if comb.status == DEFINES_WORKING then
+		return comb.get_merged_signals(DEFINES_COMBINATOR_INPUT)
 	end
-	local comb2 = station.entity_comb2
-	if comb2 then
-		local status2 = comb2.status
-		if status2 == DEFINES_WORKING or status2 == DEFINES_LOW_POWER then
-			comb2_signals = comb2.get_merged_signals(DEFINES_COMBINATOR_INPUT)
-		end
+	return nil
+end
+---@param station Station
+function get_threshold_signals(station)
+	local comb = station.entity_comb_threshold
+	if comb and comb.status == DEFINES_WORKING then
+		return comb.get_merged_signals(DEFINES_COMBINATOR_INPUT)
 	end
-	return comb1_signals, comb2_signals
+	return nil
+end
+---@param station Station
+function get_priority_signals(station)
+	local comb = station.entity_comb_priority
+	if comb and comb.status == DEFINES_WORKING then
+		return comb.get_merged_signals(DEFINES_COMBINATOR_INPUT)
+	end
+	return nil
+end
+---@param station Station
+function get_channels_signals(station)
+	local comb = station.entity_comb_channels
+	if comb and comb.status == DEFINES_WORKING then
+		return comb.get_merged_signals(DEFINES_COMBINATOR_INPUT)
+	end
+	return nil
 end
 
 ---@param map_data MapData
 ---@param station Station
-function set_comb2(map_data, station)
+function set_orders_output(map_data, station)
 	local sign = mod_settings.invert_sign and -1 or 1
-	if station.entity_comb2 then
+	if station.entity_comb_orders then
 		local deliveries = station.deliveries
 		local signals = {}
 		for item_name, count in pairs(deliveries) do
@@ -726,7 +682,7 @@ function set_comb2(map_data, station)
 			local is_fluid = game.item_prototypes[item_name] == nil--NOTE: this is expensive
 			signals[i] = {index = i, signal = {type = is_fluid and "fluid" or "item", name = item_name}, count = sign*count}
 		end
-		set_combinator_output(map_data, station.entity_comb2, signals)
+		set_combinator_output(map_data, station.entity_comb_orders, signals)
 	end
 end
 

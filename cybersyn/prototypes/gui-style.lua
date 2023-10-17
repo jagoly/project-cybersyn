@@ -392,3 +392,26 @@ if settings.startup["cybersyn-manager-enabled"].value then
   })
 
 end
+
+styles["csu_mask_button"] = {
+  type = "button_style",
+  parent = "flib_standalone_slot_button_grey",
+  size = {32, 32},
+  hovered_graphical_set = styles["flib_standalone_slot_button_grey"].default_graphical_set,
+}
+styles["csu_mask_button_selected"] = {
+  type = "button_style",
+  parent = "flib_selected_standalone_slot_button_grey",
+  size = {32, 32},
+}
+styles["csu_mask_button_wide"] = {
+  type = "button_style",
+  parent = "flib_standalone_slot_button_grey",
+  size = {48, 32},
+  hovered_graphical_set = styles["flib_standalone_slot_button_grey"].default_graphical_set,
+}
+styles["csu_mask_button_wide_selected"] = {
+  type = "button_style",
+  parent = "flib_selected_standalone_slot_button_grey",
+  size = {48, 32},
+}

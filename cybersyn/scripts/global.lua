@@ -14,6 +14,7 @@
 ---@field public depots {[uint]: Depot}
 ---@field public refuelers {[uint]: Refueler}
 ---@field public trains {[uint]: Train}
+--TODO: these can be changed to store the mask instead of a bool
 ---@field public available_trains {[string]: {[uint]: true?}} --{[network_name]: {[train_id]: true}}
 ---@field public to_refuelers {[string]: {[uint]: true?}} --{[network_name]: {[refeuler_id]: true}}
 ---@field public layouts {[uint]: (0|1|2)[]}
@@ -21,7 +22,6 @@
 ---@field public tick_state uint
 ---@field public tick_data {}
 ---@field public economy Economy
----@field public each_refuelers {[uint]: true}
 ---@field public active_alerts {[uint]: {[1]: LuaTrain, [2]: int}}?
 ---@field public manager Manager
 ---@field public perf_cache PerfCache -- This gets reset to an empty table on migration change
@@ -32,8 +32,12 @@
 
 ---@class Station
 ---@field public entity_stop LuaEntity
----@field public entity_comb1 LuaEntity
----@field public entity_comb2 LuaEntity?
+---@field public entity_comb_station LuaEntity
+---@field public entity_comb_threshold LuaEntity?
+---@field public entity_comb_priority LuaEntity?
+---@field public entity_comb_channels LuaEntity?
+---@field public entity_comb_load LuaEntity?
+---@field public entity_comb_orders LuaEntity?
 ---@field public is_p true?
 ---@field public is_r true?
 ---@field public is_stack true?
@@ -43,11 +47,11 @@
 ---@field public last_delivery_tick int
 ---@field public trains_limit int --transient
 ---@field public priority int --transient
----@field public item_priority int? --transient
 ---@field public r_threshold int >= 0 --transient
 ---@field public locked_slots int >= 0 --transient
+---@field public channels int --transient
 ---@field public network_name string?
----@field public network_mask int|{[string]: int} --transient
+---@field public network_mask int
 ---@field public wagon_combs {[int]: LuaEntity}?--NOTE: allowed to be invalid entities or combinators with the wrong operation, these must be checked and lazy deleted when found
 ---@field public deliveries {[string]: int}
 ---@field public accepted_layouts {[uint]: true?}
@@ -55,6 +59,8 @@
 ---@field public tick_signals {[uint]: Signal}? --transient
 ---@field public item_p_counts {[string]: int} --transient
 ---@field public item_thresholds {[string]: int}? --transient
+---@field public item_priorities {[string]: int}? --transient
+---@field public item_channels {[string]: int}? --transient
 ---@field public display_state int
 ---@field public is_warming_up true?
 
@@ -73,7 +79,7 @@
 ---@field public allows_all_trains true?
 ---@field public priority int
 ---@field public network_name string?
----@field public network_mask int|{[string]: int}
+---@field public network_mask int
 
 ---@class Train
 ---@field public entity LuaTrain --should only be invalid if se_is_being_teleported is true
@@ -91,7 +97,7 @@
 ---@field public use_any_depot true?
 ---@field public disable_bypass true?
 ---@field public network_name string? --can only be nil when the train is parked at a depot
----@field public network_mask int|{[string]: int} --transient
+---@field public network_mask int
 ---@field public priority int
 ---@field public refueler_id uint?
 ---@field public se_is_being_teleported true? --se only
@@ -166,7 +172,6 @@ function init_global()
 	global.layout_top_id = 1
 	global.refuelers = {}
 	global.to_refuelers = {}
-	global.each_refuelers = {}
 	global.perf_cache = {}
 
 	IS_SE_PRESENT = remote.interfaces["space-exploration"] ~= nil

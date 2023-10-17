@@ -22,7 +22,7 @@ function remove_manifest(map_data, station, manifest, sign)
 			deliveries[item.name] = nil
 		end
 	end
-	set_comb2(map_data, station)
+	set_orders_output(map_data, station)
 	station.deliveries_total = station.deliveries_total - 1
 	if station.deliveries_total == 0 and band(station.display_state, 1) > 0 then
 		station.display_state = station.display_state - 1
@@ -82,43 +82,23 @@ function create_delivery(map_data, r_station_id, p_station_id, train_id, manifes
 		r_station.deliveries_total = r_station.deliveries_total + 1
 		p_station.deliveries_total = p_station.deliveries_total + 1
 
-		local r_is_each = r_station.network_name == NETWORK_EACH
-		local p_is_each = p_station.network_name == NETWORK_EACH
 		for item_i, item in ipairs(manifest) do
 			assert(item.count > 0, "main.lua error, transfer amount was not positive")
 
 			r_station.deliveries[item.name] = (r_station.deliveries[item.name] or 0) + item.count
 			p_station.deliveries[item.name] = (p_station.deliveries[item.name] or 0) - item.count
 
-			if item_i > 1 or r_is_each or p_is_each then
-				local f, a
-				if r_is_each then
-					f, a = pairs(r_station.network_mask--[[@as {[string]: int}]])
-					if p_is_each then
-						for network_name, _ in f, a do
-							local item_network_name = network_name..":"..item.name
-							economy.all_r_stations[item_network_name] = nil
-							economy.all_p_stations[item_network_name] = nil
-						end
-						f, a = pairs(p_station.network_mask--[[@as {[string]: int}]])
-					end
-				elseif p_is_each then
-					f, a = pairs(p_station.network_mask--[[@as {[string]: int}]])
-				else
-					f, a = once, r_station.network_name
-				end
-				--prevent deliveries from being processed for these items until their stations are re-polled
-				--if we don't wait until they are repolled a duplicate delivery might be generated for stations that share inventories
-				for network_name, _ in f, a do
-					local item_network_name = network_name..":"..item.name
-					economy.all_r_stations[item_network_name] = nil
-					economy.all_p_stations[item_network_name] = nil
-				end
+			--prevent deliveries from being processed for these items until their stations are re-polled
+			--if we don't wait until they are repolled a duplicate delivery might be generated for stations that share inventories
+			if item_i > 1 then
+				local item_network_name = r_station.network_name--[[@as string]]..":"..item.name
+				economy.all_r_stations[item_network_name] = nil
+				economy.all_p_stations[item_network_name] = nil
 			end
 		end
 
-		set_comb2(map_data, p_station)
-		set_comb2(map_data, r_station)
+		set_orders_output(map_data, p_station)
+		set_orders_output(map_data, r_station)
 
 		p_station.display_state = 1
 		update_display(map_data, p_station)
@@ -150,7 +130,7 @@ function create_manifest(map_data, r_station_id, p_station_id, train_id, primary
 		local item_type = v.signal.type
 		local r_item_count = v.count
 		local r_effective_item_count = r_item_count + (r_station.deliveries[item_name] or 0)
-		if r_effective_item_count < 0 and r_item_count < 0 then
+		if r_effective_item_count < 0 and r_item_count < 0 and band(r_station.item_channels and r_station.item_channels[item_name] or r_station.channels, p_station.item_channels and p_station.item_channels[item_name] or p_station.channels) > 0 then
 			local r_threshold = r_station.item_thresholds and r_station.item_thresholds[item_name] or r_station.r_threshold
 			if r_station.is_stack and item_type == "item" then
 				r_threshold = r_threshold*get_stack_size(map_data, item_name)
@@ -293,15 +273,7 @@ local function tick_dispatch(map_data, mod_settings)
 				goto continue
 			end
 
-			local threshold = station.r_threshold
-			local prior = station.priority
-			local item_threshold = station.item_thresholds and station.item_thresholds[item_name] or nil
-			if item_threshold then
-				threshold = item_threshold
-				if station.item_priority then
-					prior = station.item_priority--[[@as int]]
-				end
-			end
+			local prior = station.item_priorities and station.item_priorities[item_name] or station.priority
 			if prior < best_r_prior then
 				goto continue
 			end
@@ -312,7 +284,7 @@ local function tick_dispatch(map_data, mod_settings)
 			end
 
 			r_station_i = i
-			r_threshold = threshold
+			r_threshold = station.item_thresholds and station.item_thresholds[item_name] or station.r_threshold
 			best_r_prior = prior
 			best_timestamp = station.last_delivery_tick
 			::continue::
@@ -330,15 +302,10 @@ local function tick_dispatch(map_data, mod_settings)
 
 		local r_station_id = r_stations[r_station_i]
 		local r_station = stations[r_station_id]
-		---@type string
-		local network_name
-		if r_station.network_name == NETWORK_EACH then
-			_, _, network_name = string.find(item_network_name, "^(.*):")
-		else
-			network_name = r_station.network_name
-		end
+		local network_name = r_station.network_name--[[@as string]]
 		local trains = map_data.available_trains[network_name]
 		local is_fluid = item_type == "fluid"
+		local r_channels = r_station.item_channels and r_station.item_channels[item_name] or r_station.channels
 		if not is_fluid and r_station.is_stack then
 			r_threshold = r_threshold*get_stack_size(map_data, item_name)
 		end
@@ -355,7 +322,7 @@ local function tick_dispatch(map_data, mod_settings)
 		---@type uint
 		local j = 1
 		while j <= #p_stations do
-			local p_flag, r_flag, netand, best_p_train_id, best_t_prior, best_capacity, best_t_to_p_dist, effective_count, override_threshold, p_prior, best_p_to_r_dist, effective_threshold, slot_threshold, item_deliveries
+			local netand, best_p_train_id, best_t_prior, best_capacity, best_t_to_p_dist, effective_count, override_threshold, p_prior, best_p_to_r_dist, effective_threshold, slot_threshold, item_deliveries
 
 			local p_station_id = p_stations[j]
 			local p_station = stations[p_station_id]
@@ -369,10 +336,12 @@ local function tick_dispatch(map_data, mod_settings)
 				goto p_continue
 			end
 
-			p_flag = get_network_mask(p_station, network_name)
-			r_flag = get_network_mask(r_station, network_name)
-			netand = band(p_flag, r_flag)
+			netand = band(p_station.network_mask, r_station.network_mask)
 			if netand == 0 then
+				goto p_continue
+			end
+
+			if band(p_station.item_channels and p_station.item_channels[item_name] or p_station.channels, r_channels) == 0 then
 				goto p_continue
 			end
 
@@ -398,10 +367,7 @@ local function tick_dispatch(map_data, mod_settings)
 				goto p_continue_remove
 			end
 
-			p_prior = p_station.priority
-			if override_threshold and p_station.item_priority then
-				p_prior = p_station.item_priority--[[@as int]]
-			end
+			p_prior = p_station.item_priorities and p_station.item_priorities[item_name] or p_station.priority
 			if p_prior < best_p_prior then
 				goto p_continue
 			end
@@ -432,8 +398,7 @@ local function tick_dispatch(map_data, mod_settings)
 			if trains then
 				for train_id, _ in pairs(trains) do
 					local train = map_data.trains[train_id]
-					local train_flag = get_network_mask(train, network_name)
-					if not btest(netand, train_flag) or train.se_is_being_teleported then
+					if not btest(netand, train.network_mask) or train.se_is_being_teleported then
 						goto train_continue
 					end
 					if correctness < 2 then
@@ -560,7 +525,7 @@ local function tick_poll_station(map_data, mod_settings)
 			tick_data.i = tick_data.i - 1
 		end
 	end
-	if station.entity_stop.valid and station.entity_comb1.valid and (not station.entity_comb2 or station.entity_comb2.valid) then
+	if station.entity_stop.valid and check_station_combs_valid(station) then
 		station.trains_limit = station.entity_stop.trains_limit
 	else
 		on_station_broken(map_data, station_id, station)
@@ -568,40 +533,60 @@ local function tick_poll_station(map_data, mod_settings)
 	end
 	station.r_threshold = mod_settings.r_threshold
 	station.priority = mod_settings.priority
-	station.item_priority = nil
 	station.locked_slots = mod_settings.locked_slots
-	local is_each = station.network_name == NETWORK_EACH
-	if is_each then
-		station.network_mask = {}
-	else
-		station.network_mask = mod_settings.network_mask
-	end
-	local comb1_signals, comb2_signals = get_signals(station)
-	station.tick_signals = comb1_signals
-	station.item_p_counts = {}
+	station.channels = -1
+	station.item_thresholds = nil
+	station.item_priorities = nil
+	station.item_channels = nil
 
+	-- TODO: optimise, combine with validity checks from above
+	local station_signals = get_station_signals(station)
+	local threshold_signals = get_threshold_signals(station)
+	local priority_signals = get_priority_signals(station)
+	local channels_signals = get_channels_signals(station)
+
+	local network_name = station.network_name--[[@as string]]
+
+	station.tick_signals = station_signals
+	station.item_p_counts = {}
 	local is_requesting_nothing = true
-	if comb1_signals then
-		if comb2_signals then
+
+	if station_signals then
+		-- TODO: can we safely keep virtual signals? if they aren't dangerous better not to check for them
+		if threshold_signals then
 			station.item_thresholds = {}
-			for k, v in pairs(comb2_signals) do
+			for k, v in pairs(threshold_signals) do
 				local item_name = v.signal.name
-				local item_count = v.count
-				local item_type = v.signal.type
 				if item_name then
-					if item_type == "virtual" then
-						if item_name == SIGNAL_PRIORITY then
-							station.item_priority = item_count
-						end
-					else
-						station.item_thresholds[item_name] = abs(item_count)
+					if v.signal.type ~= "virtual" then
+						station.item_thresholds[item_name] = abs(v.count)
 					end
 				end
 			end
-		else
-			station.item_thresholds = nil
 		end
-		for k, v in pairs(comb1_signals) do
+		if priority_signals then
+			station.item_priorities = {}
+			for k, v in pairs(priority_signals) do
+				local item_name = v.signal.name
+				if item_name then
+					if v.signal.type ~= "virtual" then
+						station.item_priorities[item_name] = v.count
+					end
+				end
+			end
+		end
+		if channels_signals then
+			station.item_channels = {}
+			for k, v in pairs(channels_signals) do
+				local item_name = v.signal.name
+				if item_name then
+					if v.signal.type ~= "virtual" then
+						station.item_channels[item_name] = v.count
+					end
+				end
+			end
+		end
+		for k, v in pairs(station_signals) do
 			local item_name = v.signal.name
 			local item_count = v.count
 			local item_type = v.signal.type
@@ -614,20 +599,16 @@ local function tick_poll_station(map_data, mod_settings)
 						station.r_threshold = abs(item_count)
 					elseif item_name == LOCKED_SLOTS then
 						station.locked_slots = max(item_count, 0)
-					elseif is_each then
-						station.network_mask[item_name] = item_count
+					elseif item_name == SIGNAL_CHANNELS then
+						station.channels = item_count
 					end
-					comb1_signals[k] = nil
-				end
-				if item_name == station.network_name then
-					station.network_mask = item_count
-					comb1_signals[k] = nil
+					station_signals[k] = nil
 				end
 			else
-				comb1_signals[k] = nil
+				station_signals[k] = nil
 			end
 		end
-		for k, v in pairs(comb1_signals) do
+		for k, v in pairs(station_signals) do
 			---@type string
 			local item_name = v.signal.name
 			local item_type = v.signal.type
@@ -643,13 +624,7 @@ local function tick_poll_station(map_data, mod_settings)
 				if -effective_item_count >= r_threshold and -item_count >= r_threshold then
 					is_not_requesting = false
 					is_requesting_nothing = false
-					local f, a
-					if station.network_name == NETWORK_EACH then
-						f, a = pairs(station.network_mask--[[@as {[string]: int}]])
-					else
-						f, a = once, station.network_name
-					end
-					for network_name, _ in f, a do
+					do
 						local item_network_name = network_name..":"..item_name
 						local stations = all_r_stations[item_network_name]
 						if stations == nil then
@@ -664,13 +639,7 @@ local function tick_poll_station(map_data, mod_settings)
 			end
 			if is_not_requesting then
 				if station.is_p and effective_item_count > 0 and item_count > 0 then
-					local f, a
-					if station.network_name == NETWORK_EACH then
-						f, a = pairs(station.network_mask--[[@as {[string]: int}]])
-					else
-						f, a = once, station.network_name
-					end
-					for network_name, _ in f, a do
+					do
 						local item_network_name = network_name..":"..item_name
 						local stations = all_p_stations[item_network_name]
 						if stations == nil then
@@ -681,7 +650,7 @@ local function tick_poll_station(map_data, mod_settings)
 						station.item_p_counts[item_name] = effective_item_count
 					end
 				else
-					comb1_signals[k] = nil
+					station_signals[k] = nil
 				end
 			end
 		end
@@ -724,21 +693,6 @@ function tick_poll_entities(map_data, mod_settings)
 		else
 			tick_data.last_train = nil
 		end
-
-		if tick_data.last_refueler == nil or map_data.each_refuelers[tick_data.last_refueler] then
-			local refueler_id, _ = next(map_data.each_refuelers, tick_data.last_refueler)
-			tick_data.last_refueler = refueler_id
-			if refueler_id then
-				local refueler = map_data.refuelers[refueler_id]
-				if refueler.entity_stop.valid and refueler.entity_comb.valid then
-					set_refueler_from_comb(map_data, mod_settings, refueler_id, refueler)
-				else
-					on_refueler_broken(map_data, refueler_id, refueler)
-				end
-			end
-		else
-			tick_data.last_refueler = nil
-		end
 	else
 		if tick_data.last_comb == nil or map_data.to_comb[tick_data.last_comb] then
 			local comb_id, comb = next(map_data.to_comb, tick_data.last_comb)
@@ -775,8 +729,8 @@ function tick_init(map_data, mod_settings)
 					map_data.active_station_ids[#map_data.active_station_ids + 1] = id
 					table_remove(map_data.warmup_station_ids, 1)
 					map_data.warmup_station_cycles[id] = nil
-					if station.entity_comb1.valid then
-						combinator_update(map_data, station.entity_comb1)
+					if station.entity_comb_station.valid then
+						combinator_update(map_data, station.entity_comb_station)
 					else
 						on_station_broken(map_data, id, station)
 					end
@@ -798,7 +752,7 @@ function tick_init(map_data, mod_settings)
 			local station = map_data.stations[id]
 			if station then
 				local pre = station.allows_all_trains
-				if station.entity_comb1.valid then
+				if station.entity_comb_station.valid then
 					set_station_from_comb(station)
 					if station.allows_all_trains ~= pre then
 						update_stop_if_auto(map_data, station, true)

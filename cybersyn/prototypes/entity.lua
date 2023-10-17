@@ -4,220 +4,97 @@ combinator_entity.icon = "__cybersyn__/graphics/icons/cybernetic-combinator.png"
 combinator_entity.radius_visualisation_specification = {
 	sprite = {
 		filename = "__cybersyn__/graphics/icons/area-of-effect.png",
-		tint = {r = 1, g = 1, b = 0, a = .5},
+		tint = {r = 0.4, g = 1.0, b = 0.2, a = 0.4},
 		height = 64,
 		width = 64,
 	},
-	--offset = {0, .5},
-	distance = 1.5,
+	distance = 2.5,
 }
-combinator_entity.active_energy_usage = "10KW"
+combinator_entity.collision_box = {{-0.35, -0.35}, {0.35, 0.35}}
+combinator_entity.selection_box = {{-0.5, -0.5}, {0.5, 0.5}}
+combinator_entity.energy_source = { type = "void" }
+combinator_entity.input_connection_bounding_box = {{-0.5, -0.49}, {0.5, 0.5}}
+combinator_entity.output_connection_bounding_box = {{0.0, -0.01}, {0.0, -0.01}}
+combinator_entity.flags = { "placeable-neutral", "player-creation", "hide-alt-info" }
 
 if mods["nullius"] then
 	combinator_entity.localised_name = { "entity-name.cybersyn-combinator" }
 end
 
-local COMBINATOR_SPRITE = "__cybersyn__/graphics/combinator/cybernetic-combinator.png"
-local COMBINATOR_HR_SPRITE = "__cybersyn__/graphics/combinator/hr-cybernetic-combinator.png"
-local COMBINATOR_SHADOW = "__cybersyn__/graphics/combinator/cybernetic-combinator-shadow.png"
-local COMBINATOR_HR_SHADOW = "__cybersyn__/graphics/combinator/hr-cybernetic-combinator-shadow.png"
-combinator_entity.sprites = {
-	north = {layers = {
-		{
-			filename=COMBINATOR_SPRITE,
-			priority="high",
-			x=0, y=0,
-			width=74, height=64,
-			frame_count=1,
-			shift={ 0.03125, 0.25, },
-			scale=1,
-			hr_version={
-				filename=COMBINATOR_HR_SPRITE,
-				priority="high",
-				x=0, y=0,
-				width=144, height=124,
-				frame_count=1,
-				shift={ 0.015625, 0.234375, },
-				scale=0.5,
-			},
-		},
-		{
-			filename=COMBINATOR_SHADOW,
-			priority="high",
-			x=0, y=0,
-			width=76, height=78,
-			frame_count=1,
-			shift={ 0.4375, 0.75, },
-			draw_as_shadow=true,
-			scale=1,
-			hr_version={
-				filename=COMBINATOR_HR_SHADOW,
-				priority="high",
-				x=0, y=0,
-				width=148, height=156,
-				frame_count=1,
-				shift={ 0.421875, 0.765625, },
-				draw_as_shadow=true,
-				scale=0.5,
-			},
+combinator_entity.sprites = make_4way_animation_from_spritesheet({ layers = {
+	{
+		filename = "__cybersyn__/graphics/combinator/cybernetic-combinator.png",
+		width = 58,
+		height = 52,
+		frame_count = 1,
+		shift = util.by_pixel(0, 5),
+		hr_version = {
+			scale = 0.5,
+			filename = "__cybersyn__/graphics/combinator/hr-cybernetic-combinator.png",
+			width = 114,
+			height = 102,
+			frame_count = 1,
+			shift = util.by_pixel(0, 5)
 		}
-	}},
-	east = {layers={
-		{
-			filename=COMBINATOR_SPRITE,
-			priority="high",
-			x=74, y=0,
-			width=74, height=64,
-			frame_count=1,
-			shift={ 0.03125, 0.25, },
-			scale=1,
-			hr_version={
-				filename=COMBINATOR_HR_SPRITE,
-				priority="high",
-				x=144, y=0,
-				width=144, height=124,
-				frame_count=1,
-				shift={ 0.015625, 0.234375, },
-				scale=0.5,
-			},
-		},
-		{
-			filename=COMBINATOR_SHADOW,
-			priority="high",
-			x=76, y=0,
-			width=76, height=78,
-			frame_count=1,
-			shift={ 0.4375, 0.75, },
-			draw_as_shadow=true,
-			scale=1,
-			hr_version={
-				filename=COMBINATOR_HR_SHADOW,
-				priority="high",
-				x=148, y=0,
-				width=148, height=156,
-				frame_count=1,
-				shift={ 0.421875, 0.765625, },
-				draw_as_shadow=true,
-				scale=0.5,
-			},
-		},
-	}},
-	south = {layers={
-		{
-			filename=COMBINATOR_SPRITE,
-			priority="high",
-			x=148, y=0,
-			width=74, height=64,
-			frame_count=1,
-			shift={ 0.03125, 0.25, },
-			scale=1,
-			hr_version={
-				filename=COMBINATOR_HR_SPRITE,
-				priority="high",
-				x=288, y=0,
-				width=144, height=124,
-				frame_count=1,
-				shift={ 0.015625, 0.234375, },
-				scale=0.5,
-			},
-		},
-		{
-			filename=COMBINATOR_SHADOW,
-			priority="high",
-			x=152, y=0,
-			width=76, height=78,
-			frame_count=1,
-			shift={ 0.4375, 0.75, },
-			draw_as_shadow=true,
-			scale=1,
-			hr_version={
-				filename=COMBINATOR_HR_SHADOW,
-				priority="high",
-				x=296, y=0,
-				width=148, height=156,
-				frame_count=1,
-				shift={ 0.421875, 0.765625, },
-				draw_as_shadow=true,
-				scale=0.5,
-			},
+	},
+	{
+		filename = "__cybersyn__/graphics/combinator/cybernetic-combinator-shadow.png",
+		width = 50,
+		height = 34,
+		frame_count = 1,
+		shift = util.by_pixel(9, 6),
+		draw_as_shadow = true,
+		hr_version = {
+			scale = 0.5,
+			filename = "__cybersyn__/graphics/combinator/hr-cybernetic-combinator-shadow.png",
+			width = 98,
+			height = 66,
+			frame_count = 1,
+			shift = util.by_pixel(8.5, 5.5),
+			draw_as_shadow = true
 		}
-	}},
-	west = {layers={
-		{
-			filename=COMBINATOR_SPRITE,
-			priority="high",
-			x=222, y=0,
-			width=74, height=64,
-			frame_count=1,
-			shift={ 0.03125, 0.25, },
-			scale=1,
-			hr_version={
-				filename=COMBINATOR_HR_SPRITE,
-				priority="high",
-				x=432, y=0,
-				width=144, height=124,
-				frame_count=1,
-				shift={ 0.015625, 0.234375, },
-				scale=0.5,
-			},
-		},
-		{
-			filename=COMBINATOR_SHADOW,
-			priority="high",
-			x=228, y=0,
-			width=76, height=78,
-			frame_count=1,
-			shift={ 0.4375, 0.75, },
-			draw_as_shadow=true,
-			scale=1,
-			hr_version={
-				filename=COMBINATOR_HR_SHADOW,
-				priority="high",
-				x=444, y=0,
-				width=148, height=156,
-				frame_count=1,
-				shift={ 0.421875, 0.765625, },
-				draw_as_shadow=true,
-				scale=0.5,
-			},
-		}
-	}},
-}
+	}
+}})
 
 local function create_combinator_display_direction(x, y, shift)
 	return {
-			filename="__cybersyn__/graphics/combinator/cybernetic-displays.png",
-			x=x, y=y,
-			width=15, height=11,
+		filename="__cybersyn__/graphics/combinator/cybernetic-displays.png",
+		x=x, y=y,
+		width=15, height=11,
+		shift=shift,
+		draw_as_glow=true,
+		hr_version={
+			scale=0.5,
+			filename="__cybersyn__/graphics/combinator/hr-cybernetic-displays.png",
+			x=2*x, y=2*y,
+			width=30, height=22,
 			shift=shift,
-			draw_as_glow=true,
-			hr_version={
-				scale=0.5,
-				filename="__cybersyn__/graphics/combinator/hr-cybernetic-displays.png",
-				x=2*x, y=2*y,
-				width=30, height=22,
-				shift=shift,
-				draw_as_glow=true,
-			},
+			draw_as_glow=true
 		}
-end
-local function create_combinator_display(x, y, shiftv, shifth)
-	return {
-		north=create_combinator_display_direction(x, y, shiftv),
-		east=create_combinator_display_direction(x, y, shifth),
-		south=create_combinator_display_direction(x, y, shiftv),
-		west=create_combinator_display_direction(x, y, shifth),
 	}
 end
-combinator_entity.plus_symbol_sprites = create_combinator_display(0, 0, { 0, -0.140625, }, { 0, -0.328125, })
-combinator_entity.minus_symbol_sprites = create_combinator_display(15, 0, { 0, -0.140625, }, { 0, -0.328125, })
-combinator_entity.divide_symbol_sprites = create_combinator_display(30, 0, { 0, -0.140625, }, { 0, -0.328125, })
-combinator_entity.modulo_symbol_sprites = create_combinator_display(45, 0, { 0, -0.140625, }, { 0, -0.328125, })
-combinator_entity.power_symbol_sprites = create_combinator_display(0, 11, { 0, -0.140625, }, { 0, -0.328125, })
-combinator_entity.left_shift_symbol_sprites = create_combinator_display(15, 11, { 0, -0.140625, }, { 0, -0.328125, })
-combinator_entity.right_shift_symbol_sprites = create_combinator_display(30, 11, { 0, -0.140625, }, { 0, -0.328125, })
-combinator_entity.multiply_symbol_sprites = combinator_entity.divide_symbol_sprites
+local function create_combinator_display(x, y)
+	return {
+		north=create_combinator_display_direction(x, y, util.by_pixel(0, -5)),
+		east=create_combinator_display_direction(x, y, util.by_pixel(0, -5)),
+		south=create_combinator_display_direction(x, y, util.by_pixel(0, -5)),
+		west=create_combinator_display_direction(x, y, util.by_pixel(0, -5))
+	}
+end
+combinator_entity.multiply_symbol_sprites = create_combinator_display(0, 0)
+combinator_entity.divide_symbol_sprites = create_combinator_display(15, 0)
+combinator_entity.plus_symbol_sprites = create_combinator_display(30, 0)
+combinator_entity.minus_symbol_sprites = create_combinator_display(45, 0)
+combinator_entity.modulo_symbol_sprites = create_combinator_display(0, 11)
+combinator_entity.power_symbol_sprites = create_combinator_display(15, 11)
+combinator_entity.left_shift_symbol_sprites = create_combinator_display(30, 11)
+combinator_entity.right_shift_symbol_sprites = create_combinator_display(45, 11)
+combinator_entity.and_symbol_sprites = create_combinator_display(0, 22)
+combinator_entity.or_symbol_sprites = create_combinator_display(15, 22)
+combinator_entity.xor_symbol_sprites = create_combinator_display(30, 22)
 
+combinator_entity.input_connection_points = data.raw["constant-combinator"]["constant-combinator"].circuit_wire_connection_points
+combinator_entity.output_connection_points = combinator_entity.input_connection_points
 
 combinator_out_entity = flib.copy_prototype(data.raw["constant-combinator"]["constant-combinator"], COMBINATOR_OUT_NAME)
 combinator_out_entity.icon = nil

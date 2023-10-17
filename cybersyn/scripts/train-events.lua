@@ -7,9 +7,9 @@ local btest = bit32.btest
 ---@param station Station
 ---@param manifest Manifest?
 ---@param sign int?
-local function set_comb1(map_data, station, manifest, sign)
-	local comb = station.entity_comb1
-	if comb.valid then
+local function set_load_output(map_data, station, manifest, sign)
+	local comb = station.entity_comb_load
+	if comb and comb.valid then
 		if manifest then
 			local signals = {}
 			for i, item in ipairs(manifest) do
@@ -32,22 +32,24 @@ function on_failed_delivery(map_data, train_id, train)
 	local manifest = train.manifest--[[@as Manifest]]
 	local is_p_in_progress = train.status == STATUS_TO_P or train.status == STATUS_P
 	local is_r_in_progress = is_p_in_progress or train.status == STATUS_TO_R or train.status == STATUS_R
+	-- TODO: why were these validating comb2, which wasn't being used here?
+	-- unsure if I should validate all combs here?
 	if is_p_in_progress then
 		local station = map_data.stations[p_station_id]
-		if station.entity_comb1.valid and (not station.entity_comb2 or station.entity_comb2.valid) then
+		if check_station_combs_valid(station) then
 			remove_manifest(map_data, station, manifest, 1)
 			if train.status == STATUS_P then
-				set_comb1(map_data, station, nil)
+				set_load_output(map_data, station, nil)
 				unset_wagon_combs(map_data, station)
 			end
 		end
 	end
 	if is_r_in_progress then
 		local station = map_data.stations[r_station_id]
-		if station.entity_comb1.valid and (not station.entity_comb2 or station.entity_comb2.valid) then
+		if check_station_combs_valid(station) then
 			remove_manifest(map_data, station, manifest, -1)
 			if train.status == STATUS_R then
-				set_comb1(map_data, station, nil)
+				set_load_output(map_data, station, nil)
 				unset_wagon_combs(map_data, station)
 			end
 		end
@@ -77,14 +79,9 @@ end
 ---@param train_id uint
 ---@param train Train
 function add_available_train(map_data, train_id, train)
-	if train.network_name then
-		local f, a
-		if train.network_name == NETWORK_EACH then
-			f, a = next, train.network_mask
-		else
-			f, a = once, train.network_name
-		end
-		for network_name in f, a do
+	local network_name = train.network_name
+	if network_name then
+		do
 			local network = map_data.available_trains[network_name]
 			if not network then
 				network = {}
@@ -119,13 +116,8 @@ end
 function remove_available_train(map_data, train_id, train)
 	if train.is_available then
 		train.is_available = nil
-		local f, a
-		if train.network_name == NETWORK_EACH then
-			f, a = next, train.network_mask
-		else
-			f, a = once, train.network_name
-		end
-		for network_name in f, a do
+		local network_name = train.network_name
+		if network_name then
 			local network = map_data.available_trains[network_name]
 			if network then
 				network[train_id] = nil
@@ -220,12 +212,12 @@ local function on_train_arrives_station(map_data, station, train_id, train)
 	---@type uint
 	if train.status == STATUS_TO_P then
 		train.status = STATUS_P
-		set_comb1(map_data, station, train.manifest, mod_settings.invert_sign and 1 or -1)
+		set_load_output(map_data, station, train.manifest, mod_settings.invert_sign and 1 or -1)
 		set_p_wagon_combs(map_data, station, train)
 		interface_raise_train_status_changed(train_id, STATUS_TO_P, STATUS_P)
 	elseif train.status == STATUS_TO_R then
 		train.status = STATUS_R
-		set_comb1(map_data, station, train.manifest, mod_settings.invert_sign and -1 or 1)
+		set_load_output(map_data, station, train.manifest, mod_settings.invert_sign and -1 or 1)
 		set_r_wagon_combs(map_data, station, train)
 		interface_raise_train_status_changed(train_id, STATUS_TO_R, STATUS_R)
 	end
@@ -252,7 +244,7 @@ local function on_train_leaves_stop(map_data, mod_settings, train_id, train)
 		train.status = STATUS_TO_R
 		local station = map_data.stations[train.p_station_id]
 		remove_manifest(map_data, station, train.manifest, 1)
-		set_comb1(map_data, station, nil)
+		set_load_output(map_data, station, nil)
 		unset_wagon_combs(map_data, station)
 		if train.has_filtered_wagon then
 			train.has_filtered_wagon = nil
@@ -271,7 +263,7 @@ local function on_train_leaves_stop(map_data, mod_settings, train_id, train)
 	elseif train.status == STATUS_R then
 		local station = map_data.stations[train.r_station_id]
 		remove_manifest(map_data, station, train.manifest, -1)
-		set_comb1(map_data, station, nil)
+		set_load_output(map_data, station, nil)
 		unset_wagon_combs(map_data, station)
 		--complete delivery
 		train.p_station_id = nil
@@ -309,13 +301,8 @@ local function on_train_leaves_stop(map_data, mod_settings, train_id, train)
 				return
 			end
 		else
-			local f, a
-			if train.network_name == NETWORK_EACH then
-				f, a = next, train.network_mask
-			else
-				f, a = once, train.network_name
-			end
-			for network_name in f, a do
+			local network_name = train.network_name
+			if network_name then
 				local refuelers = map_data.to_refuelers[network_name]
 				if refuelers then
 					local best_refueler_id = nil
@@ -327,10 +314,7 @@ local function on_train_leaves_stop(map_data, mod_settings, train_id, train)
 							on_refueler_broken(map_data, id, refueler)
 						else
 							set_refueler_from_comb(map_data, mod_settings, id, refueler)
-
-							local refueler_network_mask = get_network_mask(refueler, network_name)
-							local train_network_mask = get_network_mask(train, network_name)
-							if btest(train_network_mask, refueler_network_mask) and (refueler.allows_all_trains or refueler.accepted_layouts[train.layout_id]) and refueler.trains_total < refueler.entity_stop.trains_limit then
+							if btest(train.network_mask, refueler.network_mask) and (refueler.allows_all_trains or refueler.accepted_layouts[train.layout_id]) and refueler.trains_total < refueler.entity_stop.trains_limit then
 								if refueler.priority >= best_prior then
 									local t = get_any_train_entity(train.entity)
 									local dist = t and get_dist(t, refueler.entity_stop) or INF
@@ -466,7 +450,7 @@ function on_train_changed(event)
 						end
 						if id and station.entity_stop.valid and station.entity_stop.connected_rail == rail then
 							if is_station then
-								if station.entity_comb1 and (not station.entity_comb2 or station.entity_comb2.valid) then
+								if check_station_combs_valid(station) then
 									on_train_arrives_station(map_data, station, train_id, train)
 								end
 							elseif station.entity_comb.valid then

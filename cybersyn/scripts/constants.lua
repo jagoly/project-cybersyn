@@ -7,20 +7,33 @@ NONEMPTY_TRAIN_NAME = "cybersyn-nonempty-train"
 SIGNAL_PRIORITY = "cybersyn-priority"
 REQUEST_THRESHOLD = "cybersyn-request-threshold"
 LOCKED_SLOTS = "cybersyn-locked-slots"
+SIGNAL_CHANNELS = "cybersyn-channels"
 
 COMBINATOR_NAME = "cybersyn-combinator"
 COMBINATOR_OUT_NAME = "cybersyn-combinator-output"
 COMBINATOR_CLOSE_SOUND = "entity-close/cybersyn-combinator"
 ALERT_SOUND = "utility/console_message"
 
-MODE_DEFAULT = "*"
-MODE_PRIMARY_IO = "/"
-MODE_PRIMARY_IO_FAILED_REQUEST = "^"
-MODE_PRIMARY_IO_ACTIVE = "<<"
-MODE_SECONDARY_IO = "%"
-MODE_DEPOT = "+"
-MODE_WAGON = "-"
-MODE_REFUELER = ">>"
+-- MODE_DEFAULT = "*"
+-- MODE_PRIMARY_IO = "/"
+-- MODE_PRIMARY_IO_FAILED_REQUEST = "^"
+-- MODE_PRIMARY_IO_ACTIVE = "<<"
+-- MODE_SECONDARY_IO = "%"
+-- MODE_DEPOT = "+"
+-- MODE_WAGON = "-"
+-- MODE_REFUELER = ">>"
+
+CSU_MODE_STATION = "*"
+CSU_MODE_STATION_FAILED = "/"
+CSU_MODE_STATION_ACTIVE = "+"
+CSU_MODE_THRESHOLD = "-"
+CSU_MODE_PRIORITY = "%"
+CSU_MODE_CHANNELS = "^"
+CSU_MODE_LOAD = "<<"
+CSU_MODE_ORDERS = ">>"
+CSU_MODE_DEPOT = "AND"
+CSU_MODE_REFUELER = "OR"
+CSU_MODE_WAGON = "XOR"
 
 SETTING_DISABLE_ALLOW_LIST = 2
 SETTING_IS_STACK = 3
@@ -30,9 +43,6 @@ SETTING_DISABLE_DEPOT_BYPASS = 6
 SETTING_ENABLE_SLOT_BARRING = 7
 
 NETWORK_SIGNAL_DEFAULT = {name="signal-A", type="virtual"}
-NETWORK_SIGNAL_GUI_DEFAULT = {name="signal-each", type="virtual"}
-NETWORK_ANYTHING = "signal-anything"
-NETWORK_EACH = "signal-each"
 INACTIVITY_TIME = 100
 LOCK_TRAIN_TIME = 60*60*60*24*7
 
